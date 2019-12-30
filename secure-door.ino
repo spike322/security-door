@@ -2,8 +2,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <LiquidCrystal_I2C.h>
-#include <SPI.h>
 #include <WiFiNINA.h>
+#include <ArduinoMqttClient.h>
 
 #include "arduino_secrets.h" 
 
@@ -12,16 +12,27 @@
 #define ALLOWED_LED 4
 #define NOT_ALLOWED_LED 5
 
-
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
 int status = WL_IDLE_STATUS;
 
+//MQTT Credentials
+const char broker[] = MQTT_BROKER_RESPONSE;
+const int port = MQTT_BROKER_RESPONSE_PORT;
+const char username[] = MQTT_BROKER_RESPONSE_USER;
+const char password[] = MQTT_BROKER_RESPONSE_PWD;
+const char receiver_topic[] = "access/response";
+const char sender_topic[] = "access/request";
+const char new_topic[] = "access/new";
+
 Servo servo;
-
 MFRC522 mfrc522(SS_PIN, RST_PIN); 
-
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+WiFiClient wifiClient;
+MqttClient mqttClient(wifiClient);
+
+unsigned long lastMillis = 0;
 
 void openDoor() {
     lcd.clear();
@@ -36,13 +47,43 @@ void openDoor() {
     }
 }
 
+void mqttBrokerResponseConnect() {
+  mqttClient.setUsernamePassword(username, password);
+
+  Serial.print("Attempting to connect to the MQTT broker: ");
+  Serial.println(broker);
+
+  if (!mqttClient.connect(broker, port)) {
+    Serial.print("MQTT connection failed! Error code = ");
+    Serial.println(mqttClient.connectError());
+
+    while (1);
+  }
+
+  Serial.println("You're connected to the MQTT broker!");
+  Serial.println();
+
+  // set the message receive callback
+  mqttClient.onMessage(onMqttMessage);
+  
+  Serial.print("Subscribing to topic: ");
+  Serial.println(receiver_topic);
+
+  // subscribe to a topic
+  mqttClient.subscribe(receiver_topic);
+  //mqttClient.subscribe(new_topic);
+}
+
+// On receive message from the topic
+void onMqttMessage(int messageSize) {
+  Serial.println("New message!");
+}
+
 void wifiConnect() {
   Serial.println("Checking Wi-fi status ...");
 
-  // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!");
-    // don't continue
     while (true);
   }
 
@@ -51,31 +92,25 @@ void wifiConnect() {
     Serial.println("Please upgrade the firmware");
   }
 
-  // attempt to connect to Wifi network:
   while (status != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
     Serial.println(ssid);
-    // Connect to WPA/WPA2 network:
     status = WiFi.begin(ssid, pass);
 
-    // wait 10 seconds for connection:
     delay(10000);
   }
 
-  // you're connected now, so print out the data:
   Serial.print("You're connected to the network");
   printCurrentNet();
   printWifiData();
 }
 
 void printWifiData() {
-  // print your board's IP address:
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
   Serial.println(ip);
 
-  // print your MAC address:
   byte mac[6];
   WiFi.macAddress(mac);
   Serial.print("MAC address: ");
@@ -83,22 +118,18 @@ void printWifiData() {
 }
 
 void printCurrentNet() {
-  // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
 
-  // print the MAC address of the router you're attached to:
   byte bssid[6];
   WiFi.BSSID(bssid);
   Serial.print("BSSID: ");
   printMacAddress(bssid);
 
-  // print the received signal strength:
   long rssi = WiFi.RSSI();
   Serial.print("signal strength (RSSI):");
   Serial.println(rssi);
 
-  // print the encryption type:
   byte encryption = WiFi.encryptionType();
   Serial.print("Encryption Type:");
   Serial.println(encryption, HEX);
@@ -130,7 +161,8 @@ void setup() {
   servo.write(0);
   Serial.begin(9600);  
   while (!Serial);
-  wifiConnect();     
+  wifiConnect();
+  mqttBrokerResponseConnect();
   SPI.begin();
   mfrc522.PCD_Init();  
   Serial.println("Approximate your card to the reader...");

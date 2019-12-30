@@ -1,2 +1,6 @@
 #define SECRET_SSID "TP-LINK_4DDA46"
 #define SECRET_PASS "p4ssw0rdr0ut3rTPL1NK"
+#define MQTT_BROKER_RESPONSE "tailor.cloudmqtt.com"
+#define MQTT_BROKER_RESPONSE_PWD "z7YL9QScgIuL"
+#define MQTT_BROKER_RESPONSE_PORT 12489
+#define MQTT_BROKER_RESPONSE_USER "bvsezqfd"
