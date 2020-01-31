@@ -16,14 +16,22 @@ char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
 int status = WL_IDLE_STATUS;
 
+/*************** TEMPORARY SIMULATION ***************/
+const int deniedButton = 8;
+const int allowedButton = 7;
+/****************************************************/
+
 //MQTT Credentials
-const char broker[] = MQTT_BROKER_RESPONSE;
-const int port = MQTT_BROKER_RESPONSE_PORT;
-const char username[] = MQTT_BROKER_RESPONSE_USER;
-const char password[] = MQTT_BROKER_RESPONSE_PWD;
-const char receiver_topic[] = "access/response";
+const char broker[] = MQTT_BROKER;
+const int port = MQTT_BROKER_PORT;
+const char username[] = MQTT_BROKER_USER;
+const char password[] = MQTT_BROKER_PWD;
+const char access_allowed[] = "access/allowed";
+const char access_denied[] = "access/denied";
 const char sender_topic[] = "access/request";
-const char new_topic[] = "access/new";
+const char register_new[] = "register/new";
+const char register_allowed[] = "register/allowed";
+const char register_denied[] = "register/denied";
 
 Servo servo;
 MFRC522 mfrc522(SS_PIN, RST_PIN); 
@@ -34,6 +42,12 @@ MqttClient mqttClient(wifiClient);
 
 unsigned long lastMillis = 0;
 
+void openDoorRequest(String addressCard) {
+  mqttClient.beginMessage(sender_topic);
+  mqttClient.print((String) addressCard);
+  mqttClient.endMessage();
+}
+
 void openDoor() {
     lcd.clear();
     lcd.print("Allowed to pass");
@@ -41,13 +55,24 @@ void openDoor() {
     for(int i = 0; i <= 90; i++) {
       servo.write(i);
     }
+    
     delay(3000);
+    
     for(int i = 90; i >= 0; i--) {
       servo.write(i);
     }
 }
 
-void mqttBrokerResponseConnect() {
+void denyAccess() {
+  lcd.clear();
+  lcd.print("Not allowed!");
+  Serial.println("Access denied");
+  Serial.println();
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+  delay(1000);
+}
+
+void mqttBrokerConnect() {
   mqttClient.setUsernamePassword(username, password);
 
   Serial.print("Attempting to connect to the MQTT broker: ");
@@ -65,19 +90,28 @@ void mqttBrokerResponseConnect() {
 
   // set the message receive callback
   mqttClient.onMessage(onMqttMessage);
-  
-  Serial.print("Subscribing to topic: ");
-  Serial.println(receiver_topic);
 
-  // subscribe to a topic
-  mqttClient.subscribe(receiver_topic);
-  //mqttClient.subscribe(new_topic);
+  // subscribe to topics
+  Serial.println("Subscribing to topics: ");
+  Serial.print(" - ");
+  Serial.println(sender_topic);
+  mqttClient.subscribe(sender_topic);
+  Serial.print(" - ");
+  Serial.println(access_allowed);
+  mqttClient.subscribe(access_allowed);
+  Serial.print(" - ");
+  Serial.println(access_denied);
+  mqttClient.subscribe(access_denied);
 }
 
 // On receive message from the topic
 void onMqttMessage(int messageSize) {
-  Serial.println("New message!");
-}
+  if (mqttClient.messageTopic() == access_allowed) {
+    openDoor();
+  } else if (mqttClient.messageTopic() == access_denied) {
+    denyAccess();
+  }
+} 
 
 void wifiConnect() {
   Serial.println("Checking Wi-fi status ...");
@@ -153,6 +187,10 @@ void setup() {
   pinMode(ALLOWED_LED, OUTPUT);
   pinMode(NOT_ALLOWED_LED, OUTPUT);
 
+  // TEMPORARY SIMULATION
+  pinMode(allowedButton, INPUT);
+  pinMode(deniedButton, INPUT);
+
   lcd.begin();
   lcd.backlight();
   lcd.clear();
@@ -162,7 +200,7 @@ void setup() {
   Serial.begin(9600);  
   while (!Serial);
   wifiConnect();
-  mqttBrokerResponseConnect();
+  mqttBrokerConnect();
   SPI.begin();
   mfrc522.PCD_Init();  
   Serial.println("Approximate your card to the reader...");
@@ -170,11 +208,13 @@ void setup() {
 }
 
 void loop() {
+  mqttClient.poll();
+  
   digitalWrite(ALLOWED_LED, LOW);
   digitalWrite(NOT_ALLOWED_LED, LOW);
 
   // Look for new cards
-  if ( ! mfrc522.PICC_IsNewCardPresent()) 
+  /*if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
     return;
   }
@@ -197,12 +237,22 @@ void loop() {
   
   Serial.println();
   Serial.print("Message : ");
-  content.toUpperCase();
+  content.toUpperCase();*/
+
+  if(digitalRead(allowedButton) == 1) {
+    openDoorRequest("17 0E 70 1C");//content.substring(1)
+    Serial.println("Green pressed!");
+  }
+  if(digitalRead(deniedButton) == 1) {
+    openDoorRequest("E9 33 97 47");
+    Serial.println("Red pressed!");
+  }
   
-  if (content.substring(1) == "17 0E 70 1C") {
+  /*if (content.substring(1) == "17 0E 70 1C") {
+    lcd.clear();
     Serial.println("Authorized access");
     Serial.println();
-    openDoor();
+    openDoorRequest(content.substring(1));
   } else {
     lcd.clear();
     lcd.print("Not allowed!");
@@ -210,5 +260,6 @@ void loop() {
     Serial.println();
     digitalWrite(NOT_ALLOWED_LED, HIGH);
     delay(1000);
-  }
+  }*/
+  delay(500);
 }
