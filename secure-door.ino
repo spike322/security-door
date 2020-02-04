@@ -1,14 +1,15 @@
 #include <Servo.h>
 #include <SPI.h>
-#include <MFRC522.h>
+#include <RFID.h>
+//#include <MFRC522.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFiNINA.h>
 #include <ArduinoMqttClient.h>
 
 #include "arduino_secrets.h" 
 
-#define SS_PIN 10
-#define RST_PIN 9
+#define SDA_DIO 10
+#define RESET_DIO 9
 #define ALLOWED_LED 4
 #define NOT_ALLOWED_LED 5
 #define UP 13
@@ -17,7 +18,7 @@
 
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
-String options[] = {"       ENTER","      ADD USER","    DELETE USER"};
+String options[] = {"        ENTER","      ADD USER","    DELETE USER"};
 int status = WL_IDLE_STATUS;
 int choice = 0;
 String uid = "";
@@ -37,7 +38,8 @@ const char register_request[] = "register/request";
 const char register_response[] = "register/response";
 
 Servo servo;
-MFRC522 mfrc522(SS_PIN, RST_PIN); 
+//MFRC522 mfrc522(SS_PIN, RST_PIN); 
+RFID RC522(SDA_DIO, RESET_DIO); 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 WiFiClient wifiClient;
@@ -56,18 +58,34 @@ void openDoor() {
     lcd.setCursor(0, 0);
     lcd.print("   ALLOWED TO PASS!");
     digitalWrite(ALLOWED_LED, HIGH);
-    for(int i = 0; i <= 90; i++) {
-      servo.write(i);
-    }
     
-    delay(3000);
+    servo.write(90);
+    
+    delay(4000);
     lcd.setCursor(0, 0);
     lcd.print("Please, close the   door :)");
     while(!digitalRead(CHECK));
+    delay(1000);
     
-    for(int i = 90; i >= 0; i--) {
-      servo.write(i);
-    }
+    servo.write(0);
+}
+
+void checkIsOpen() {
+  if(!digitalRead(CHECK)) {
+    lcd.setCursor(0, 0);
+    lcd.print("  MAINTENANCE MODE");
+    lcd.setCursor(0, 1);
+    lcd.print("Close the door to");
+    lcd.setCursor(0, 2);
+    lcd.print("begin");
+
+    digitalWrite(ALLOWED_LED, HIGH);
+    digitalWrite(NOT_ALLOWED_LED, HIGH);
+    
+    while(!digitalRead(CHECK));
+
+    printActualChoice();
+  }
 }
 
 void denyAccess() {
@@ -141,10 +159,7 @@ void onMqttMessage(int messageSize) {
     Serial.println(s);
   }
   
-  Serial.println(options[choice]);
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print(options[choice]);
+  printActualChoice();
 } 
 
 void wifiConnect() {
@@ -226,7 +241,29 @@ void printMacAddress(byte mac[]) {
   Serial.println();
 }
 
-String readCard() {
+void printActualChoice() {
+  Serial.println(options[choice]);
+  lcd.clear();
+  lcd.setCursor(0, 1);
+  lcd.print(options[choice]);
+}
+
+void readCard() {
+  byte i;
+
+  if (RC522.isCard()) {
+    RC522.readCardSerial();
+    Serial.println("Card UID:");
+ 
+    for(i = 0; i <= 4; i++) {
+      uid += String (RC522.serNum[i],HEX);
+      uid.toUpperCase();
+    }
+    Serial.println(uid);
+    delay(150);
+  }
+}
+/*String readCard() {
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
@@ -269,14 +306,15 @@ String readCardWaiting() {
   
   content.toUpperCase();
   return (String) content;
-}
+}*/
 
 void addCard(String newCard) {
   Serial.print("New card UID: ");
   Serial.println(newCard);
   Serial.println();
   Serial.println("Confirm with administrator card...");
-  String admin = "E9 33 97 47";//readCardWaiting();
+  String admin = "";
+  
     
   mqttClient.beginMessage(register_request);
   mqttClient.print((String) "{ \"newCard\": \""+ newCard + "\", \"admin\": \""+ admin + "\" }");
@@ -284,9 +322,7 @@ void addCard(String newCard) {
   
   choice = 0;
 
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print(options[choice]);
+  printActualChoice();
 }
 
 void setup() {
@@ -313,75 +349,51 @@ void setup() {
     
     while(!digitalRead(CHECK));
   }
-
-  servo.attach(2);
-  
-  servo.write(90);
-  delay(1000);
   
   servo.write(0);
   Serial.begin(9600);  
   while (!Serial);
   wifiConnect();
   mqttBrokerConnect();
-  SPI.begin();
-  mfrc522.PCD_Init();  
-  Serial.println(options[choice]);
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print(options[choice]);
+  SPI.begin(); 
+  RC522.init();
+  printActualChoice();
 }
 
-void loop() {
+void loop() {  
   mqttClient.poll();
   
   digitalWrite(ALLOWED_LED, LOW);
   digitalWrite(NOT_ALLOWED_LED, LOW);
 
-  /*if (digitalRead(UP) == 1) { //INCREASE CHOICE
+  if (digitalRead(UP) == 1) { //INCREASE CHOICE
     choice = (choice + 1) % 3;
-    Serial.println(options[choice]);
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print(options[choice]);
+    printActualChoice();
   } else if(digitalRead(DOWN) == 1) { //DECREASE CHOICE
     if (choice == 0) choice = 2;
     else choice--;
-    Serial.println(options[choice]);
-    lcd.clear();
-    lcd.setCursor(0, 1);
-    lcd.print(options[choice]);
+    printActualChoice();
   }
 
-  delay(500);*/
+  delay(150);
 
-  // Look for new cards
-  if ( ! mfrc522.PICC_IsNewCardPresent()) 
-  {
-    return;
-  }
-  // Select one of the cards
-  if ( ! mfrc522.PICC_ReadCardSerial()) 
-  {
-    return;
-  }
-  //Show UID on serial monitor
-  Serial.print("UID tag :");
-  String content= "";
-  byte letter;
-  
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-     Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-     Serial.print(mfrc522.uid.uidByte[i], HEX);
-     content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-     content.concat(String(mfrc522.uid.uidByte[i], HEX));
-  }
-  
-  Serial.println();
-  Serial.print("Message : ");
-  content.toUpperCase();
-  
-  openDoorRequest(content.substring(1));
+  readCard();
 
-  delay(1000);
+  if(uid != "") {
+    switch(choice) {
+      case 0:
+        openDoorRequest(uid);
+        break;
+      case 1:
+        addCard(uid);
+        break;
+      case 2: 
+        //deleteCard(uid);
+        break;
+      default: break;
+    }
+    uid = "";
+  }
+
+  //checkIsOpen();
 }
