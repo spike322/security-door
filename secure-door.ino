@@ -1,7 +1,6 @@
 #include <Servo.h>
 #include <SPI.h>
 #include <RFID.h>
-//#include <MFRC522.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFiNINA.h>
 #include <ArduinoMqttClient.h>
@@ -15,6 +14,7 @@
 #define UP 13
 #define DOWN 12
 #define CHECK 3
+#define BUZZER 7
 
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
@@ -36,9 +36,10 @@ const char access_request[] = "access/request";
 const char access_response[] = "access/response";
 const char register_request[] = "register/request";
 const char register_response[] = "register/response";
+const char delete_request[] = "delete/request";
+const char delete_response[] = "delete/response";
 
 Servo servo;
-//MFRC522 mfrc522(SS_PIN, RST_PIN); 
 RFID RC522(SDA_DIO, RESET_DIO); 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -58,6 +59,13 @@ void openDoor() {
     lcd.setCursor(0, 0);
     lcd.print("   ALLOWED TO PASS!");
     digitalWrite(ALLOWED_LED, HIGH);
+
+    tone(BUZZER, 1000);
+    delay(100);
+    noTone(BUZZER);
+    tone(BUZZER, 1000);
+    delay(100);
+    noTone(BUZZER);
     
     servo.write(90);
     
@@ -94,6 +102,9 @@ void denyAccess() {
   Serial.println("Access denied");
   Serial.println();
   digitalWrite(NOT_ALLOWED_LED, HIGH);
+  tone(BUZZER, 1000);
+  delay(1000);
+  noTone(BUZZER);
   delay(3000);
 }
 
@@ -139,6 +150,12 @@ void mqttBrokerConnect() {
   Serial.print(" - ");
   Serial.println(register_response);
   mqttClient.subscribe(register_response);
+  Serial.print(" - ");
+  Serial.println(delete_request);
+  mqttClient.subscribe(delete_request);
+  Serial.print(" - ");
+  Serial.println(delete_response);
+  mqttClient.subscribe(delete_response);
   delay(500);
 }
 
@@ -157,6 +174,18 @@ void onMqttMessage(int messageSize) {
     }
   } else if (topic == register_response) {
     Serial.println(s);
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    s.toUpperCase();
+    lcd.print(s);
+    delay(3000);
+  } else if(topic == delete_response) {
+    Serial.println(s);
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    s.toUpperCase();
+    lcd.print(s);
+    delay(3000);
   }
   
   printActualChoice();
@@ -252,68 +281,45 @@ void readCard() {
   byte i;
 
   if (RC522.isCard()) {
+    tone(BUZZER, 1000);
+    delay(200);
+    noTone(BUZZER);
     RC522.readCardSerial();
     Serial.println("Card UID:");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Wait...");
  
     for(i = 0; i <= 4; i++) {
       uid += String (RC522.serNum[i],HEX);
       uid.toUpperCase();
     }
     Serial.println(uid);
-    delay(150);
+    delay(800);
   }
 }
-/*String readCard() {
-  // Look for new cards
-  if ( ! mfrc522.PICC_IsNewCardPresent()) 
-  {
-    return;
-  }
-  // Select one of the cards
-  if ( ! mfrc522.PICC_ReadCardSerial()) 
-  {
-    return;
-  }
-  //Show UID on serial monitor
-  Serial.print("UID tag :");
-  String content= "";
-  byte letter;
-  
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-     Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-     Serial.print(mfrc522.uid.uidByte[i], HEX);
-     content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-     content.concat(String(mfrc522.uid.uidByte[i], HEX));
-  }
-  content.toUpperCase();
-  
-  return (String) content;
-}
-
-
-String readCardWaiting() {
-  // Look for new cards
-  while ( ! mfrc522.PICC_IsNewCardPresent());
-  // Select one of the cards
-  while ( ! mfrc522.PICC_ReadCardSerial());
-  String content= "";
-  byte letter;
-  
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-     content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-     content.concat(String(mfrc522.uid.uidByte[i], HEX));
-  }
-  
-  content.toUpperCase();
-  return (String) content;
-}*/
 
 void addCard(String newCard) {
+  uid = "";
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("New card UID:");
+  lcd.setCursor(0, 1);
+  lcd.print(newCard);
   Serial.print("New card UID: ");
   Serial.println(newCard);
   Serial.println();
+  delay(3000);
   Serial.println("Confirm with administrator card...");
-  String admin = "";
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Admin confirmation...");
+  while(uid == "") {
+    readCard();
+    delay(500);
+  }
+  String admin = uid;
+  uid = "";
   
     
   mqttClient.beginMessage(register_request);
@@ -321,13 +327,45 @@ void addCard(String newCard) {
   mqttClient.endMessage();
   
   choice = 0;
+}
 
-  printActualChoice();
+void deleteCard(String deleteUid) {
+  uid = "";
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Delete UID:");
+  lcd.setCursor(0, 1);
+  lcd.print(deleteUid);
+  Serial.print("Delete UID: ");
+  Serial.println(deleteUid);
+  Serial.println();
+  delay(3000);
+  Serial.println("Confirm with administrator card...");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Admin confirmation...");
+  while(uid == "") {
+    readCard();
+    delay(500);
+  }
+  String admin = uid;
+  uid = "";
+  
+    
+  mqttClient.beginMessage(delete_request);
+  mqttClient.print((String) "{ \"deleteUid\": \""+ deleteUid + "\", \"admin\": \""+ admin + "\" }");
+  mqttClient.endMessage();
+  
+  choice = 0;
 }
 
 void setup() {
+  // OUTPUT PINS
   pinMode(ALLOWED_LED, OUTPUT);
   pinMode(NOT_ALLOWED_LED, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+
+  // INPUT PINS
   pinMode(CHECK, INPUT);
   pinMode(UP, INPUT);
   pinMode(DOWN, INPUT);
@@ -344,12 +382,18 @@ void setup() {
     lcd.setCursor(0, 2);
     lcd.print("begin");
 
+    tone(BUZZER, 1000);
+    delay(1000);
+    noTone(BUZZER);
+
     digitalWrite(ALLOWED_LED, HIGH);
     digitalWrite(NOT_ALLOWED_LED, HIGH);
     
     while(!digitalRead(CHECK));
   }
-  
+
+  servo.attach(2);
+  servo.write(90);
   servo.write(0);
   Serial.begin(9600);  
   while (!Serial);
@@ -358,6 +402,9 @@ void setup() {
   SPI.begin(); 
   RC522.init();
   printActualChoice();
+  tone(BUZZER, 1000);
+  delay(200);
+  noTone(BUZZER);
 }
 
 void loop() {  
@@ -382,13 +429,16 @@ void loop() {
   if(uid != "") {
     switch(choice) {
       case 0:
+        Serial.println("Request!");
         openDoorRequest(uid);
         break;
       case 1:
+        Serial.println("Add!");
         addCard(uid);
         break;
       case 2: 
-        //deleteCard(uid);
+        Serial.println("Delete!");
+        deleteCard(uid);
         break;
       default: break;
     }
