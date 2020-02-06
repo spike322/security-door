@@ -38,6 +38,7 @@ const char register_request[] = "register/request";
 const char register_response[] = "register/response";
 const char delete_request[] = "delete/request";
 const char delete_response[] = "delete/response";
+const char emergency_lock[] = "emergency/lock";
 
 Servo servo;
 RFID RC522(SDA_DIO, RESET_DIO); 
@@ -156,6 +157,9 @@ void mqttBrokerConnect() {
   Serial.print(" - ");
   Serial.println(delete_response);
   mqttClient.subscribe(delete_response);
+  Serial.print(" - ");
+  Serial.println(emergency_lock);
+  mqttClient.subscribe(emergency_lock);
   delay(500);
 }
 
@@ -186,10 +190,56 @@ void onMqttMessage(int messageSize) {
     s.toUpperCase();
     lcd.print(s);
     delay(3000);
+  } else if(topic == emergency_lock) {
+    emergencyLock();
   }
   
   printActualChoice();
 } 
+
+void emergencyLock() {
+  lcd.clear();
+  lcd.setCursor(0, 1);
+  lcd.print("EMERGENCY LOCK");
+  
+  digitalWrite(ALLOWED_LED, HIGH);
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+  tone(BUZZER, 1000);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, LOW);
+  digitalWrite(NOT_ALLOWED_LED, LOW);
+  noTone(BUZZER);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, HIGH);
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+  tone(BUZZER, 1000);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, LOW);
+  digitalWrite(NOT_ALLOWED_LED, LOW);
+  noTone(BUZZER);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, HIGH);
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+  tone(BUZZER, 1000);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, LOW);
+  digitalWrite(NOT_ALLOWED_LED, LOW);
+  noTone(BUZZER);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, HIGH);
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+  tone(BUZZER, 1000);
+  delay(1000);
+  digitalWrite(ALLOWED_LED, LOW);
+  digitalWrite(NOT_ALLOWED_LED, LOW);
+  noTone(BUZZER);
+  delay(1000);
+
+  digitalWrite(ALLOWED_LED, HIGH);
+  digitalWrite(NOT_ALLOWED_LED, HIGH);
+
+  while (true);
+}
 
 void wifiConnect() {
   Serial.println("Checking Wi-fi status ...");
@@ -445,5 +495,5 @@ void loop() {
     uid = "";
   }
 
-  //checkIsOpen();
+  checkIsOpen();
 }
