@@ -22,12 +22,8 @@ String options[] = {"        ENTER","      ADD USER","    DELETE USER"};
 int status = WL_IDLE_STATUS;
 int choice = 0;
 String uid = "";
-String sPayload;
-char* cPayload;
-bool first = false;
-bool second = false;
 
-//MQTT Credentials
+// MQTT Credentials
 const char broker[] = MQTT_BROKER;
 const int port = MQTT_BROKER_PORT;
 const char username[] = MQTT_BROKER_USER;
@@ -79,24 +75,6 @@ void openDoor() {
     servo.write(0);
 }
 
-void checkIsOpen() {
-  if(!digitalRead(CHECK)) {
-    lcd.setCursor(0, 0);
-    lcd.print("  MAINTENANCE MODE");
-    lcd.setCursor(0, 1);
-    lcd.print("Close the door to");
-    lcd.setCursor(0, 2);
-    lcd.print("begin");
-
-    digitalWrite(ALLOWED_LED, HIGH);
-    digitalWrite(NOT_ALLOWED_LED, HIGH);
-    
-    while(!digitalRead(CHECK));
-
-    printActualChoice();
-  }
-}
-
 void denyAccess() {
   lcd.clear();
   lcd.print("    NOT ALLOWED!");
@@ -107,6 +85,27 @@ void denyAccess() {
   delay(1000);
   noTone(BUZZER);
   delay(3000);
+}
+void checkIsOpen() {
+  if(!digitalRead(CHECK)) {   
+    lcd.setCursor(0, 0);
+    lcd.print("  MAINTENANCE MODE");
+    lcd.setCursor(0, 1);
+    lcd.print("Close the door to");
+    lcd.setCursor(0, 2);
+    lcd.print("begin");
+
+    digitalWrite(ALLOWED_LED, HIGH);
+    digitalWrite(NOT_ALLOWED_LED, HIGH);
+
+    tone(BUZZER, 1000);
+    delay(1000);
+    noTone(BUZZER);
+    
+    while(!digitalRead(CHECK));
+
+    printActualChoice();
+  }
 }
 
 void mqttBrokerConnect() {
@@ -200,41 +199,19 @@ void onMqttMessage(int messageSize) {
 void emergencyLock() {
   lcd.clear();
   lcd.setCursor(0, 1);
-  lcd.print("EMERGENCY LOCK");
-  
-  digitalWrite(ALLOWED_LED, HIGH);
-  digitalWrite(NOT_ALLOWED_LED, HIGH);
-  tone(BUZZER, 1000);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, LOW);
-  digitalWrite(NOT_ALLOWED_LED, LOW);
-  noTone(BUZZER);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, HIGH);
-  digitalWrite(NOT_ALLOWED_LED, HIGH);
-  tone(BUZZER, 1000);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, LOW);
-  digitalWrite(NOT_ALLOWED_LED, LOW);
-  noTone(BUZZER);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, HIGH);
-  digitalWrite(NOT_ALLOWED_LED, HIGH);
-  tone(BUZZER, 1000);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, LOW);
-  digitalWrite(NOT_ALLOWED_LED, LOW);
-  noTone(BUZZER);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, HIGH);
-  digitalWrite(NOT_ALLOWED_LED, HIGH);
-  tone(BUZZER, 1000);
-  delay(1000);
-  digitalWrite(ALLOWED_LED, LOW);
-  digitalWrite(NOT_ALLOWED_LED, LOW);
-  noTone(BUZZER);
-  delay(1000);
+  lcd.print("   EMERGENCY LOCK");
 
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(ALLOWED_LED, HIGH);
+    digitalWrite(NOT_ALLOWED_LED, HIGH);
+    tone(BUZZER, 1000);
+    delay(1000);
+    digitalWrite(ALLOWED_LED, LOW);
+    digitalWrite(NOT_ALLOWED_LED, LOW);
+    noTone(BUZZER);
+    delay(1000);
+  }
+  
   digitalWrite(ALLOWED_LED, HIGH);
   digitalWrite(NOT_ALLOWED_LED, HIGH);
 
@@ -375,6 +352,10 @@ void addCard(String newCard) {
   mqttClient.beginMessage(register_request);
   mqttClient.print((String) "{ \"newCard\": \""+ newCard + "\", \"admin\": \""+ admin + "\" }");
   mqttClient.endMessage();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Wait...");
   
   choice = 0;
 }
@@ -405,6 +386,10 @@ void deleteCard(String deleteUid) {
   mqttClient.beginMessage(delete_request);
   mqttClient.print((String) "{ \"deleteUid\": \""+ deleteUid + "\", \"admin\": \""+ admin + "\" }");
   mqttClient.endMessage();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Wait...");
   
   choice = 0;
 }
@@ -463,10 +448,10 @@ void loop() {
   digitalWrite(ALLOWED_LED, LOW);
   digitalWrite(NOT_ALLOWED_LED, LOW);
 
-  if (digitalRead(UP) == 1) { //INCREASE CHOICE
+  if (digitalRead(UP) == 1) {
     choice = (choice + 1) % 3;
     printActualChoice();
-  } else if(digitalRead(DOWN) == 1) { //DECREASE CHOICE
+  } else if(digitalRead(DOWN) == 1) {
     if (choice == 0) choice = 2;
     else choice--;
     printActualChoice();
